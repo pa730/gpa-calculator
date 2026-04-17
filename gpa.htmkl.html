@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dynamic GPA Tracker & Recommendation App</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial; margin: 20px; max-width: 950px; margin:auto; background:#f4f4f9; }
+    h1, h2 { text-align:center; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #fff; }
+    th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+    input, select { width: 70px; }
+    button { padding: 8px 15px; margin-top: 10px; cursor: pointer; background: #4CAF50; color:white; border:none; border-radius:5px; }
+    .result, .recommendation { font-weight: bold; font-size: 16px; margin-top: 20px; background:#fff; padding:15px; border-radius:5px; }
+    #chartContainer { width: 100%; margin-top: 30px; }
+    .tip { color:#333; margin:5px 0; }
+  </style>
+</head>
+<body>
+  <h1>Dynamic GPA Tracker & Recommendation App</h1>
+
+  <h2>Subjects & Grades</h2>
+  <table id="subjectsTable">
+    <tr>
+      <th>Subject</th>
+      <th>Credits</th>
+      <th>Grade</th>
+      <th>Action</th>
+    </tr>
+  </table>
+  <button onclick="addSubject()">➕ Add Subject</button>
+
+  <h2>Current Cumulative GPA (Optional)</h2>
+  <input type="number" id="currentGPA" placeholder="Previous GPA" step="0.01" min="0" max="4">
+
+  <h2>Target GPA</h2>
+  <input type="number" id="targetGPA" placeholder="Target GPA" step="0.01" min="0" max="4">
+
+  <button onclick="calculateGPA()">Calculate & Get Recommendations</button>
+
+  <div class="result" id="gpaResult"></div>
+  <div class="recommendation" id="recommendation"></div>
+  <div id="tipsContainer"></div>
+
+  <div id="chartContainer">
+    <canvas id="gpaChart"></canvas>
+  </div>
+
+  <script>
+    const grades = [
+      {label:'A', value:4},
+      {label:'A-', value:3.7},
+      {label:'B+', value:3.3},
+      {label:'B', value:3},
+      {label:'B-', value:2.7},
+      {label:'C+', value:2.3},
+      {label:'C', value:2}
+    ];
+
+    function addSubject(name='', credit=2, gradeValue=3) {
+      const table = document.getElementById('subjectsTable');
+      const row = table.insertRow();
+      const subjectCell = row.insertCell(0);
+      const creditCell = row.insertCell(1);
+      const gradeCell = row.insertCell(2);
+      const actionCell = row.insertCell(3);
+
+      subjectCell.innerHTML = `<input type="text" placeholder="Subject Name" value="${name}">`;
+      creditCell.innerHTML = `<input type="number" value="${credit}" min="1">`;
+      gradeCell.innerHTML = `<select>${grades.map(g => `<option value="${g.value}" ${g.value===gradeValue?'selected':''}>${g.label}</option>`).join('')}</select>`;
+      actionCell.innerHTML = `<button onclick="removeSubject(this)">🗑️ Remove</button>`;
+    }
+
+    function removeSubject(btn) {
+      const row = btn.parentNode.parentNode;
+      row.parentNode.removeChild(row);
+    }
+
+    // Add initial 4 subjects
+    addSubject('Math',3,3.3);
+    addSubject('English',2,3);
+    addSubject('Programming',3,3);
+    addSubject('Other',2,3);
+
+    function calculateGPA() {
+      const table = document.getElementById("subjectsTable");
+      let totalPoints = 0;
+      let totalCredits = 0;
+      let subjectNames = [];
+      let gradesPoints = [];
+      let tipsDiv = document.getElementById("tipsContainer");
+      tipsDiv.innerHTML = "";
+
+      for (let i=1; i<table.rows.length; i++) {
+        let subject = table.rows[i].cells[0].children[0].value || `Subject ${i}`;
+        let credits = parseFloat(table.rows[i].cells[1].children[0].value);
+        let grade = parseFloat(table.rows[i].cells[2].children[0].value);
+        totalPoints += credits*grade;
+        totalCredits += credits;
+        subjectNames.push(subject);
+        gradesPoints.push(grade);
+
+        // Per subject tips
+        let tip = document.createElement("div");
+        tip.className = "tip";
+        if (grade >=3.7) tip.innerText = `${subject}: Excellent! Maintain this grade.`;
+        else if (grade>=3.3) tip.innerText = `${subject}: Good! Aim for A- to boost GPA.`;
+        else if (grade>=3) tip.innerText = `${subject}: Average. Focus more.`;
+        else tip.innerText = `${subject}: Low. Prioritize this subject.`;
+        tipsDiv.appendChild(tip);
+      }
+
+      let semesterGPA = totalPoints/totalCredits;
+      let currentGPA = parseFloat(document.getElementById("currentGPA").value);
+      let targetGPA = parseFloat(document.getElementById("targetGPA").value);
+      let cumulativeGPA = semesterGPA;
+
+      if (!isNaN(currentGPA)) cumulativeGPA = ((currentGPA*totalCredits)+totalPoints)/(totalCredits*2);
+
+      document.getElementById("gpaResult").innerText = 
+        `Semester GPA: ${semesterGPA.toFixed(2)}\nCumulative GPA: ${cumulativeGPA.toFixed(2)}`;
+
+      // Recommendation
+      let recommendationText = '';
+      if (!isNaN(targetGPA)) {
+        if (cumulativeGPA>=targetGPA) recommendationText = "🎉 On track! Keep current performance.";
+        else {
+          recommendationText = "⚠️ Focus on improving high-credit subjects.\n";
+          // Suggest grade needed per subject
+          let remainingPointsNeeded = targetGPA*totalCredits*2 - (currentGPA?currentGPA*totalCredits:0) - totalPoints;
+          let avgPointsNeeded = remainingPointsNeeded/totalCredits;
+          recommendationText += `To reach target GPA, aim for an average grade of at least ${(avgPointsNeeded).toFixed(2)} per credit.`;
+        }
+      } else recommendationText = "ℹ️ Enter a target GPA to get guidance.";
+
+      document.getElementById("recommendation").innerText = recommendationText;
+
+      // Render chart
+      const ctx = document.getElementById('gpaChart').getContext('2d');
+      if(window.gpaChart) window.gpaChart.destroy();
+      window.gpaChart = new Chart(ctx, {
+        type:'bar',
+        data:{
+          labels:subjectNames,
+          datasets:[{
+            label:'Grade Points',
+            data:gradesPoints,
+            backgroundColor: gradesPoints.map(g => g>=3.7?'#4CAF50':g>=3.3?'#FFEB3B':'#F44336')
+          }]
+        },
+        options:{
+          scales:{y:{min:0,max:4}}
+        }
+      });
+    }
+  </script>
+</body>
+</html>
